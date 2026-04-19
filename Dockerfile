@@ -21,6 +21,8 @@ RUN apt-get update --yes && \
         zstd \
     && rm -rf /var/lib/apt/lists/*
 
+COPY . /app
+
 # Install Ollama
 RUN curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.21.0 sh
 
@@ -33,6 +35,6 @@ EXPOSE 11434
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD curl -f http://localhost:11434/api/tags || exit 1
 
-COPY . /app
+COPY run.sh /app/run.sh
 RUN chmod +x /app/run.sh
 CMD ["/app/run.sh"]
