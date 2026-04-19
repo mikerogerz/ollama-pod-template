@@ -27,15 +27,12 @@ RUN curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.21.0 sh
 # Create necessary directories
 RUN mkdir -p /root/.ollama/models
 
-# Copy startup script
-COPY start.sh .
-RUN chmod +x start.sh
-
 # Expose Ollama API port
 EXPOSE 11434
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 CMD curl -f http://localhost:11434/api/tags || exit 1
 
-# Start Ollama and pull the embedding model
-CMD ["start.sh"]
+COPY . /app
+RUN chmod +x /app/run.sh
+CMD ["/app/run.sh"]
