@@ -24,7 +24,7 @@ RUN apt-get update --yes && \
 COPY . /app
 
 # Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.21.1 sh
+RUN curl -fsSL https://ollama.com/install.sh | OLLAMA_VERSION=0.21.2 sh
 
 # Create necessary directories
 RUN mkdir -p /root/.ollama/models
