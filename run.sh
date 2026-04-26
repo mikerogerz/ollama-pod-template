@@ -12,14 +12,14 @@ echo "Starting Ollama Embedding Service"
 echo "========================================"
 echo ""
 
-# Check if API_KEYS environment variable is set
-if [ -z "$API_KEYS" ]; then
-    echo "❌ ERROR: API_KEYS environment variable is not set!"
+# Check if API_KEY environment variable is set
+if [ -z "$API_KEY" ]; then
+    echo "❌ ERROR: API_KEY environment variable is not set!"
     echo ""
-    echo "You must set API_KEYS in your RunPod template."
+    echo "You must set API_KEY in your RunPod template."
     echo ""
     echo "Example in RunPod template environment variables:"
-    echo "  API_KEYS=sk-prod-abc123,sk-prod-def456,sk-prod-xyz789"
+    echo "  API_KEY=sk-your-secret-token-here"
     echo ""
     echo "To generate secure API keys, run:"
     echo "  openssl rand -hex 32"
@@ -31,67 +31,44 @@ if [ -z "$API_KEYS" ]; then
     exit 1
 fi
 
-# Validate API_KEYS format
-if [[ ! "$API_KEYS" =~ ^[a-zA-Z0-9_-]+(,[a-zA-Z0-9_-]+)*$ ]]; then
-    echo "⚠️  WARNING: API_KEYS format may be invalid"
-    echo "Expected format: key1,key2,key3 (comma-separated, no spaces)"
-    echo "Current value: $API_KEYS"
-    echo ""
-fi
-
-# Display API keys info (first 10 chars only for security)
-echo "✓ API keys configured"
-IFS=',' read -ra KEYS <<< "$API_KEYS"
-echo "Number of valid keys: ${#KEYS[@]}"
-for i in "${!KEYS[@]}"; do
-    key="${KEYS[$i]}"
-    echo "  Key $((i+1)): ${key:0:10}..."
-done
+# Display API key info (first 10 chars only for security)
+echo "✓ API key configured"
+echo "  Key: ${API_KEY:0:10}..."
 echo ""
 
-# Generate Caddyfile with actual API key matchers
-echo "Generating Caddyfile with API key matchers..."
-cat > /etc/caddy/Caddyfile.generated <<'TEMPLATE'
+# Generate Caddyfile with Bearer token authentication
+echo "Generating Caddyfile with Bearer token authentication..."
+cat > /etc/caddy/Caddyfile.generated <<EOF
 :8080 {
     # Health check endpoint (no auth)
     @health path /health
     handle @health {
-        respond `{"status":"healthy","service":"ollama-caddy"}` 200
+        respond \`{"status":"healthy","service":"ollama-caddy"}\` 200
         header Content-Type application/json
     }
     
-    # All other endpoints require authentication
+    # All other endpoints require Bearer token authentication
     handle {
-        # Check if API key header exists
-        @no_key {
-            not header X-API-Key *
+        # Check if Authorization header exists
+        @no_auth {
+            not header Authorization *
         }
-        handle @no_key {
-            respond `{"error":"Unauthorized","message":"Missing X-API-Key header"}` 401
+        handle @no_auth {
+            respond \`{"error":"Unauthorized","message":"Missing Authorization header. Use: Authorization: Bearer YOUR_TOKEN"}\` 401
             header Content-Type application/json
         }
         
-TEMPLATE
-
-# Add a matcher and handler for each API key
-for key in "${KEYS[@]}"; do
-    cat >> /etc/caddy/Caddyfile.generated <<EOF
-        # Handle valid key: ${key:0:10}...
-        @key_${key//[^a-zA-Z0-9]/_} header X-API-Key "$key"
-        handle @key_${key//[^a-zA-Z0-9]/_} {
+        # Check for valid Bearer token
+        @valid_token header Authorization "Bearer $API_KEY"
+        handle @valid_token {
             reverse_proxy 127.0.0.1:11434 {
                 header_up Host {host}
                 header_up X-Real-IP {remote_host}
             }
         }
         
-EOF
-done
-
-# Complete the Caddyfile
-cat >> /etc/caddy/Caddyfile.generated <<'TEMPLATE'
-        # If no valid key matched, return 403
-        respond `{"error":"Forbidden","message":"Invalid API key"}` 403
+        # Invalid token
+        respond \`{"error":"Forbidden","message":"Invalid API token"}\` 403
         header Content-Type application/json
     }
     
@@ -108,9 +85,9 @@ cat >> /etc/caddy/Caddyfile.generated <<'TEMPLATE'
         format console
     }
 }
-TEMPLATE
+EOF
 
-echo "✓ Caddyfile generated with ${#KEYS[@]} API key matchers"
+echo "✓ Caddyfile generated with Bearer token authentication"
 echo ""
 
 # Start Caddy proxy in the background

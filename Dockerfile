@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # Set environment variables for Ollama
-ENV OLLAMA_HOST=0.0.0.0:11434
+ENV OLLAMA_HOST=127.0.0.1:11434
 ENV OLLAMA_MODELS=/root/.ollama/models
 ENV OLLAMA_NUM_PARALLEL=1
 ENV OLLAMA_MAX_LOADED_MODELS=1
@@ -17,8 +17,8 @@ ENV OLLAMA_NO_CLOUD=1
 ENV OLLAMA_KEEP_ALIVE=-1
 ENV OLLAMA_DEBUG=1
 
-# API keys will be provided via RunPod environment variable
-# Set API_KEYS="key1,key2,key3" in your RunPod template
+# API key will be provided via RunPod environment variable
+# Set API_KEY="sk-your-token-here" in your RunPod template
 
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \

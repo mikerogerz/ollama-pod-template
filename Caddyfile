@@ -8,16 +8,23 @@
 	
 	# All other endpoints require authentication
 	handle {
-		# Check if API key header exists
+		# Check if Authorization header exists
 		@no_key {
-			not header X-API-Key *
+			not header Authorization *
 		}
 		handle @no_key {
-			respond `{"error":"Unauthorized","message":"Missing X-API-Key header"}` 401
+			respond `{"error":"Unauthorized","message":"Missing Authorization header"}` 401
 			header Content-Type application/json
 		}
 		
-		# API_KEYS_MATCHERS_PLACEHOLDER
+		# Check for valid Bearer token (replaced at runtime with actual token)
+		@valid_token header Authorization "Bearer YOUR_API_KEY"
+		handle @valid_token {
+			reverse_proxy 127.0.0.1:11434 {
+				header_up Host {host}
+				header_up X-Real-IP {remote_host}
+			}
+		}
 		
 		# If no valid key matched, return 403
 		respond `{"error":"Forbidden","message":"Invalid API key"}` 403
