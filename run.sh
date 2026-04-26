@@ -49,9 +49,73 @@ for i in "${!KEYS[@]}"; do
 done
 echo ""
 
+# Generate Caddyfile with actual API key matchers
+echo "Generating Caddyfile with API key matchers..."
+cat > /etc/caddy/Caddyfile.generated <<'TEMPLATE'
+:8080 {
+    # Health check endpoint (no auth)
+    @health path /health
+    handle @health {
+        respond `{"status":"healthy","service":"ollama-caddy"}` 200
+        header Content-Type application/json
+    }
+    
+    # All other endpoints require authentication
+    handle {
+        # Check if API key header exists
+        @no_key {
+            not header X-API-Key *
+        }
+        handle @no_key {
+            respond `{"error":"Unauthorized","message":"Missing X-API-Key header"}` 401
+            header Content-Type application/json
+        }
+        
+TEMPLATE
+
+# Add a matcher and handler for each API key
+for key in "${KEYS[@]}"; do
+    cat >> /etc/caddy/Caddyfile.generated <<EOF
+        # Handle valid key: ${key:0:10}...
+        @key_${key//[^a-zA-Z0-9]/_} header X-API-Key "$key"
+        handle @key_${key//[^a-zA-Z0-9]/_} {
+            reverse_proxy 127.0.0.1:11434 {
+                header_up Host {host}
+                header_up X-Real-IP {remote_host}
+            }
+        }
+        
+EOF
+done
+
+# Complete the Caddyfile
+cat >> /etc/caddy/Caddyfile.generated <<'TEMPLATE'
+        # If no valid key matched, return 403
+        respond `{"error":"Forbidden","message":"Invalid API key"}` 403
+        header Content-Type application/json
+    }
+    
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        -Server
+    }
+    
+    log {
+        output stdout
+        format console
+    }
+}
+TEMPLATE
+
+echo "✓ Caddyfile generated with ${#KEYS[@]} API key matchers"
+echo ""
+
 # Start Caddy proxy in the background
 echo "Starting Caddy reverse proxy on :8080..."
-caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
+caddy run --config /etc/caddy/Caddyfile.generated --adapter caddyfile &
 CADDY_PID=$!
 
 # Give Caddy a moment to start
@@ -60,8 +124,12 @@ sleep 2
 # Verify Caddy started successfully
 if ! kill -0 $CADDY_PID 2>/dev/null; then
     echo "❌ ERROR: Caddy failed to start"
+    echo "Check Caddyfile syntax:"
+    cat /etc/caddy/Caddyfile.generated
     exit 1
 fi
+echo "✓ Caddy started successfully"
+echo ""
 
 # Start Ollama server in the background (localhost only)
 echo "Starting Ollama server on 127.0.0.1:11434..."
