@@ -1,0 +1,56 @@
+:8080 {
+	# Health check endpoint (no auth)
+	handle /health {
+		respond `{"status":"healthy","service":"ollama-caddy"}` 200 {
+			header Content-Type application/json
+		}
+	}
+	
+	# All other endpoints require authentication
+	handle /* {
+		# Extract API key from X-API-Key header
+		@unauthorized {
+			not header X-API-Key *
+		}
+		
+		# Get the API key from header
+		@invalid_key {
+			header X-API-Key *
+			not expression `{http.request.header.X-API-Key} in split(env.API_KEYS, ",")`
+		}
+		
+		# Return 401 if no API key provided
+		handle @unauthorized {
+			respond `{"error":"Unauthorized","message":"Missing X-API-Key header"}` 401 {
+				header Content-Type application/json
+			}
+		}
+		
+		# Return 403 if invalid API key
+		handle @invalid_key {
+			respond `{"error":"Forbidden","message":"Invalid API key"}` 403 {
+				header Content-Type application/json
+			}
+		}
+		
+		# Proxy to Ollama backend
+		reverse_proxy 127.0.0.1:11434 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+	
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		X-XSS-Protection "1; mode=block"
+		-Server
+	}
+	
+	# Logging
+	log {
+		output stdout
+		format console
+	}
+}
